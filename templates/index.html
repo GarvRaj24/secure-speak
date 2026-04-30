@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SECURE // SPEAK</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <style>
+        :root {
+            --bg-deep: #030508;
+            --neon-blue: #00f3ff;
+            --neon-purple: #bc13fe;
+            --neon-red: #ff2a2a;
+            --neon-green: #00ff88;
+            --glass: rgba(10, 15, 25, 0.85);
+            --border: 1px solid rgba(0, 243, 255, 0.3);
+            --font-main: 'Rajdhani', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+        }
+
+        body {
+            -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
+            background-color: var(--bg-deep);
+            background-image: 
+                linear-gradient(rgba(0, 243, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            color: #fff;
+            font-family: var(--font-main);
+            height: 100dvh; width: 100vw;
+            margin: 0; overflow: hidden;
+            display: flex; flex-direction: column;
+            cursor: default;
+        }
+
+        input {
+            -webkit-user-select: text !important; -moz-user-select: text !important;
+            -ms-user-select: text !important; user-select: text !important;
+            cursor: text !important; pointer-events: auto !important;
+        }
+        button, .icon-btn { cursor: pointer !important; pointer-events: auto !important; }
+        img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; pointer-events: auto; }
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+        .hidden { display: none !important; }
+
+        .screen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            transition: all 0.3s ease; z-index: 1;
+        }
+
+        /* LOGIN */
+        #login-screen {
+            justify-content: center; align-items: center;
+            background: radial-gradient(circle at center, rgba(0,243,255,0.05) 0%, transparent 80%);
+            z-index: 100; overflow-y: auto;
+        }
+        .cyber-card {
+            background: var(--glass); backdrop-filter: blur(15px);
+            border: var(--border); padding: 2.5rem; width: 90%; max-width: 420px;
+            text-align: center; box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            position: relative; z-index: 101; margin: 20px auto;
+        }
+        .cyber-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-blue), transparent);
+        }
+        .logo-text {
+            font-family: var(--font-code); font-size: 2rem; letter-spacing: -2px;
+            margin-bottom: 2rem; text-shadow: 0 0 15px var(--neon-blue);
+        }
+        .cyber-input {
+            width: 100%; background: rgba(0,0,0,0.6); border: 1px solid #444;
+            border-left: 3px solid var(--neon-blue); padding: 15px;
+            color: var(--neon-blue); font-family: var(--font-code); font-size: 1rem;
+            margin-bottom: 1rem; transition: 0.3s;
+        }
+        .cyber-input:focus { box-shadow: 0 0 20px rgba(0,243,255,0.15); border-color: var(--neon-blue); }
+        .cyber-btn {
+            width: 100%; padding: 15px; background: rgba(0,243,255,0.1);
+            border: 1px solid var(--neon-blue); color: var(--neon-blue);
+            font-family: var(--font-code); font-weight: bold; text-transform: uppercase;
+            letter-spacing: 2px; cursor: pointer; transition: 0.2s; margin-bottom: 10px;
+        }
+        .cyber-btn:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 25px var(--neon-blue); }
+        .cyber-btn.secondary { border-color: #555; color: #888; background: transparent; }
+        .cyber-btn.secondary:hover { border-color: #fff; color: #fff; background: rgba(255,255,255,0.05); }
+
+        #share-area {
+            background: rgba(0,0,0,0.8); border: 1px dashed #555; padding: 15px;
+            margin-bottom: 20px; text-align: left;
+        }
+        #share-link-text { color: var(--neon-purple); font-family: var(--font-code); font-size: 1.4rem; letter-spacing: 2px; }
+        #share-full-url {
+            color: #666; font-family: var(--font-code); font-size: 0.65rem;
+            word-break: break-all; margin-top: 6px; display: block;
+        }
+        .share-row { display: flex; justify-content: space-between; align-items: center; }
+        .share-btns { display: flex; gap: 6px; }
+
+        /* CHAT HEADER */
+        .chat-header {
+            height: 70px; background: rgba(3,5,8,0.95); border-bottom: var(--border);
+            display: flex; justify-content: space-between; align-items: center; padding: 0 20px;
+            z-index: 50; flex-shrink: 0;
+        }
+        .header-info { display: flex; align-items: center; gap: 20px; }
+        .info-block { display: flex; flex-direction: column; }
+        .info-label { font-size: 0.65rem; color: #666; font-family: var(--font-code); letter-spacing: 1px; }
+        .info-val { font-family: var(--font-code); font-weight: bold; }
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+
+        .status-dot {
+            height: 10px; width: 10px; background: #333; border-radius: 50%;
+            display: inline-block; margin-right: 8px; transition: 0.3s;
+        }
+        .status-dot.active { background: var(--neon-blue); box-shadow: 0 0 10px var(--neon-blue); }
+
+        /* MESSAGES */
+        #messages { flex-grow: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .message {
+            max-width: 85%; padding: 12px 18px; position: relative; font-size: 1rem;
+            word-wrap: break-word; animation: fadeIn 0.3s ease; margin-top: 10px;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .message.sent {
+            align-self: flex-end;
+            background: linear-gradient(135deg, rgba(0,243,255,0.15), rgba(0,243,255,0.05));
+            border: 1px solid rgba(0,243,255,0.3); border-right: 3px solid var(--neon-blue);
+            color: #d0faff; border-radius: 12px 2px 12px 12px;
+        }
+        .message.received {
+            align-self: flex-start;
+            background: linear-gradient(135deg, rgba(188,19,254,0.15), rgba(188,19,254,0.05));
+            border: 1px solid rgba(188,19,254,0.3); border-left: 3px solid var(--neon-purple);
+            color: #f0d0ff; border-radius: 2px 12px 12px 12px;
+        }
+        .sender-name { font-family: var(--font-code); font-size: 0.7rem; position: absolute; top: -18px; opacity: 0.7; white-space: nowrap; }
+        .sent .sender-name { right: 0; color: var(--neon-blue); }
+        .received .sender-name { left: 0; color: var(--neon-purple); }
+
+        /* INPUT */
+        .input-area {
+            background: #000; border-top: var(--border); padding: 15px;
+            display: flex; align-items: center; gap: 10px; z-index: 50; flex-shrink: 0;
+        }
+        .icon-btn {
+            background: rgba(255,255,255,0.05); border: 1px solid #333; color: #888;
+            width: 42px; height: 42px; border-radius: 4px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: 0.2s;
+            flex-shrink: 0;
+        }
+        .icon-btn:hover { border-color: var(--neon-blue); color: var(--neon-blue); }
+        .icon-btn.vo-mode:hover { border-color: var(--neon-red); color: var(--neon-red); }
+        .icon-btn.call-btn { border-color: var(--neon-green); color: var(--neon-green); }
+        .icon-btn.call-btn:hover { background: rgba(0,255,136,0.15); box-shadow: 0 0 15px var(--neon-green); }
+        .recording { animation: pulseRed 1s infinite; background: rgba(255,42,42,0.2) !important; border-color: var(--neon-red) !important; color: var(--neon-red) !important; }
+        @keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(255,42,42,0.4); } 70% { box-shadow: 0 0 0 10px rgba(255,42,42,0); } 100% { box-shadow: 0 0 0 0 rgba(255,42,42,0); } }
+        #message-input { flex-grow: 1; background: transparent; border: none; color: #fff; font-family: var(--font-main); font-size: 1.1rem; padding: 0 10px; min-width: 0; }
+        .send-btn { background: var(--neon-blue); color: #000; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 15px var(--neon-blue); flex-shrink: 0; }
+
+        /* ===================== CALL OVERLAY ===================== */
+        .call-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(3, 5, 8, 0.96); backdrop-filter: blur(20px);
+            z-index: 500; display: none;
+            flex-direction: column; align-items: center; justify-content: center;
+            gap: 30px;
+        }
+        .call-overlay::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-green), transparent);
+            animation: scanline 2s ease-in-out infinite;
+        }
+        @keyframes scanline { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+        .call-avatar {
+            width: 100px; height: 100px; border-radius: 50%;
+            border: 2px solid var(--neon-green);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2.5rem; color: var(--neon-green);
+            box-shadow: 0 0 30px rgba(0,255,136,0.3);
+            animation: pulseGreen 2s ease-in-out infinite;
+        }
+        @keyframes pulseGreen {
+            0%,100% { box-shadow: 0 0 20px rgba(0,255,136,0.2); }
+            50% { box-shadow: 0 0 50px rgba(0,255,136,0.5); }
+        }
+        .call-overlay.incoming .call-avatar { border-color: var(--neon-purple); color: var(--neon-purple); box-shadow: 0 0 30px rgba(188,19,254,0.3); animation: pulseGreen 1s ease-in-out infinite; }
+
+        #call-peer-name {
+            font-family: var(--font-code); font-size: 1.8rem;
+            color: #fff; letter-spacing: 3px;
+        }
+        #call-status {
+            font-family: var(--font-code); font-size: 0.8rem;
+            color: var(--neon-green); letter-spacing: 2px;
+            animation: blink 1.5s step-end infinite;
+        }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+        #call-timer-container {
+            font-family: var(--font-code); font-size: 1rem; color: #fff;
+            display: none; align-items: center; gap: 8px;
+        }
+        #call-timer { color: var(--neon-green); }
+
+        .call-actions { display: flex; gap: 20px; align-items: center; }
+        .call-action-btn {
+            width: 64px; height: 64px; border-radius: 50%; border: none;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem; cursor: pointer; transition: 0.2s;
+        }
+        #call-accept { background: var(--neon-green); color: #000; box-shadow: 0 0 20px var(--neon-green); }
+        #call-accept:hover { transform: scale(1.1); }
+        #call-reject { background: var(--neon-red); color: #fff; box-shadow: 0 0 20px var(--neon-red); }
+        #call-reject:hover { transform: scale(1.1); }
+        #btn-hangup { background: var(--neon-red); color: #fff; box-shadow: 0 0 20px var(--neon-red); }
+        #btn-hangup:hover { transform: scale(1.1); }
+        #btn-mute { background: rgba(255,255,255,0.1); color: #fff; border: 2px solid #555; }
+        #btn-mute:hover { background: rgba(255,255,255,0.2); }
+
+        /* MODAL */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.95); backdrop-filter: blur(20px); align-items: center; justify-content: center; animation: fadeIn 0.3s; }
+        .modal-active { display: flex !important; }
+        .modal-content { max-width: 90%; max-height: 90%; border: 2px solid var(--neon-blue); box-shadow: 0 0 30px var(--neon-blue); border-radius: 8px; pointer-events: none; }
+
+        /* MEDIA */
+        .media-content { width: 260px; height: 180px; overflow: hidden; border-radius: 6px; border: 1px solid rgba(0,243,255,0.2); background: #000; display: flex; align-items: center; justify-content: center; margin-top: 5px; }
+        .media-content img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; cursor: pointer; }
+        .media-content img:hover { transform: scale(1.1); }
+        .vo-container { border: 1px dashed var(--neon-red); padding: 10px; background: rgba(255,42,42,0.05); text-align: center; }
+        .vo-btn { background: var(--neon-red); color: #000; border: none; font-weight: bold; padding: 5px 10px; cursor: pointer; margin-top: 5px; }
+
+        /* Scrollbar */
+        #messages::-webkit-scrollbar { width: 4px; }
+        #messages::-webkit-scrollbar-track { background: transparent; }
+        #messages::-webkit-scrollbar-thumb { background: rgba(0,243,255,0.2); border-radius: 2px; }
+    </style>
+</head>
+<body>
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen" class="screen">
+    <div class="cyber-card">
+        <div class="logo-text"><i class="fas fa-shield-alt"></i> SECURE // SPEAK</div>
+        
+        <input type="text" id="username-input" class="cyber-input" placeholder="IDENTITY (Optional)" style="border-left-color: var(--neon-purple); color: var(--neon-purple);">
+        <button id="btn-create" class="cyber-btn"><i class="fas fa-plus-square"></i> INITIALIZE NEW ROOM</button>
+        
+        <div id="share-area" class="hidden">
+            <div class="share-row">
+                <div>
+                    <span style="color:#666; font-size:0.7rem; display:block; font-family:var(--font-code);">ACCESS CODE</span>
+                    <div id="share-link-text"></div>
+                </div>
+                <div class="share-btns">
+                    <button class="icon-btn" id="btn-copy" title="Copy Room ID"><i class="fas fa-copy"></i></button>
+                </div>
+            </div>
+            <span style="color:#444; font-size:0.65rem; font-family:var(--font-code); display:block; margin-top:8px;">SHAREABLE LINK:</span>
+            <div id="share-full-url" style="color:#666; font-family:var(--font-code); font-size:0.65rem; word-break:break-all; margin-top:4px;"></div>
+            <button id="btn-copy-link" class="cyber-btn" style="margin-top:10px; margin-bottom:0; padding:10px; font-size:0.8rem;">
+                <i class="fas fa-link"></i> COPY SHAREABLE LINK
+            </button>
+        </div>
+        
+        <div style="margin: 25px 0; color: #444; font-family: var(--font-code);">--- OR CONNECT ---</div>
+        <input type="text" id="room-id" class="cyber-input" placeholder="ENTER ROOM ID...">
+        <button id="btn-join" class="cyber-btn secondary">ESTABLISH UPLINK <i class="fas fa-satellite-dish"></i></button>
+    </div>
+</div>
+
+<!-- CHAT SCREEN -->
+<div id="chat-screen" class="screen hidden">
+    <div class="chat-header">
+        <div class="header-info">
+            <div id="connection-dot" class="status-dot"></div>
+            <div class="info-block">
+                <div class="info-label">CHANNEL</div>
+                <div id="display-room" class="info-val" style="color: var(--neon-blue);">...</div>
+            </div>
+            <div style="width:1px; height:30px; background:#333;"></div>
+            <div class="info-block">
+                <div class="info-label">IDENTITY</div>
+                <div id="display-username" class="info-val" style="color: var(--neon-purple);">...</div>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button id="btn-call" class="icon-btn call-btn" onclick="initiateCall()" title="Voice Call" style="display:none;">
+                <i class="fas fa-phone"></i>
+            </button>
+            <button onclick="location.reload()" class="icon-btn" title="Disconnect" style="border-color: #333; width: 35px; height: 35px;">
+                <i class="fas fa-power-off"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div id="status-text" style="position:absolute; top:75px; left:20px; font-size: 0.7rem; color: #555; font-family: var(--font-code); z-index:40;">WAITING FOR PEER...</div>
+    <div id="messages" style="padding-top: 40px;"></div>
+
+    <div class="input-area">
+        <button class="icon-btn" onclick="triggerImageUpload(false)" title="Send Image"><i class="far fa-image"></i></button>
+        <button class="icon-btn vo-mode" onclick="triggerImageUpload(true)" title="View Once Image"><i class="fas fa-bomb"></i></button>
+        <button id="record-btn" class="icon-btn" onmousedown="startRecording(false)" onmouseup="stopRecording()" title="Voice Message"><i class="fas fa-microphone-alt"></i></button>
+        <button id="record-btn-vo" class="icon-btn vo-mode" onmousedown="startRecording(true)" onmouseup="stopRecording()" title="View Once Audio"><i class="fas fa-radiation"></i></button>
+        <input type="text" id="message-input" placeholder="Encrypting message..." autocomplete="off">
+        <button onclick="sendTextMessage()" class="send-btn"><i class="fas fa-paper-plane"></i></button>
+        <input type="file" id="image-input" accept="image/*" style="display: none;">
+    </div>
+</div>
+
+<!-- CALL OVERLAY -->
+<div id="call-overlay" class="call-overlay">
+    <div class="call-avatar"><i class="fas fa-user"></i></div>
+    <div id="call-peer-name">PEER</div>
+    <div id="call-status">CALLING...</div>
+    <div id="call-timer-container">
+        <i class="fas fa-lock" style="color:var(--neon-green); font-size:0.8rem;"></i>
+        <span id="call-timer" >00:00</span>
+        <span style="color:#555; font-size:0.7rem; font-family:var(--font-code);">E2E ENCRYPTED</span>
+    </div>
+    <div class="call-actions">
+        <button id="call-accept" class="call-action-btn" onclick="acceptCall()" title="Accept">
+            <i class="fas fa-phone"></i>
+        </button>
+        <button id="btn-mute" class="call-action-btn" onclick="toggleMute()" title="Mute" style="display:none;">
+            <i class="fas fa-microphone"></i>
+        </button>
+        <button id="call-reject" class="call-action-btn" onclick="rejectCall()" title="Reject">
+            <i class="fas fa-phone-slash"></i>
+        </button>
+        <button id="btn-hangup" class="call-action-btn" onclick="hangUp()" title="Hang Up" style="display:none;">
+            <i class="fas fa-phone-slash"></i>
+        </button>
+    </div>
+</div>
+
+<!-- Hidden audio element for remote peer voice -->
+<audio id="remote-audio" autoplay playsinline style="display:none;"></audio>
+
+<!-- IMAGE MODAL -->
+<div id="image-modal" class="modal" onclick="closeModal()">
+    <img class="modal-content" id="full-image">
+</div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

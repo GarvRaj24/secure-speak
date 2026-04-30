@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SECURE // SPEAK</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+
+    <style>
+        :root {
+            --bg-deep: #030508;
+            --neon-blue: #00f3ff;
+            --neon-purple: #bc13fe;
+            --neon-red: #ff2a2a;
+            --glass: rgba(10, 15, 25, 0.85);
+            --border: 1px solid rgba(0, 243, 255, 0.3);
+            --font-main: 'Rajdhani', sans-serif;
+            --font-code: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background-color: var(--bg-deep);
+            background-image: 
+                linear-gradient(rgba(0, 243, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 243, 255, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+            color: #fff;
+            font-family: var(--font-main);
+            height: 100dvh;
+            width: 100vw;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        /* --- IMAGE MODAL (POPUP) --- */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; 
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            background-color: rgba(0, 0, 0, 0.85); /* Dark transparent bg */
+            backdrop-filter: blur(10px); /* THE BLUR EFFECT */
+            -webkit-backdrop-filter: blur(10px);
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s;
+        }
+
+        .modal-active { display: flex !important; }
+
+        .modal-content {
+            max-width: 90%;
+            max-height: 90%;
+            border: 2px solid var(--neon-blue);
+            box-shadow: 0 0 30px var(--neon-blue);
+            border-radius: 8px;
+            object-fit: contain;
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            color: #fff;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            text-shadow: 0 0 10px red;
+        }
+        .close-modal:hover { color: var(--neon-red); }
+        /* --- MEDIA SIZING FIX --- */
+        .media-content {
+            width: 260px;           /* FORCE WIDTH */
+            height: 180px;          /* FORCE HEIGHT */
+            overflow: hidden;       /* Cut off anything outside the box */
+            border-radius: 6px;
+            border: 1px solid rgba(0, 243, 255, 0.2); /* Neon border */
+            background: #000;       /* Background for transparent images */
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .media-content img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;      /* KEY: Crops image to fill the box perfectly */
+            /* object-fit: contain;  <-- CHANGE TO THIS if you want to see the whole image (with black bars) */
+            display: block;
+            transition: transform 0.3s ease;
+        }
+
+        /* Cool zoom effect on hover */
+        .media-content img:hover {
+            transform: scale(1.1);
+            cursor: pointer;
+        }
+        /* --- UTILS --- */
+        .hidden { display: none !important; }
+        .flex { display: flex; }
+        
+        /* --- SCREENS --- */
+        .screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column;
+            transition: all 0.3s ease;
+            z-index: 1;
+        }
+
+        /* --- LOGIN SCREEN --- */
+        #login-screen {
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, rgba(0,243,255,0.05) 0%, transparent 80%);
+            z-index: 100; /* Ensure this is on top */
+        }
+
+        .cyber-card {
+            background: var(--glass);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: var(--border);
+            padding: 2.5rem;
+            width: 90%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+            position: relative;
+            z-index: 101;
+        }
+
+        .cyber-card::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--neon-blue), transparent);
+        }
+
+        .logo-text {
+            font-family: var(--font-code);
+            font-size: 2rem;
+            letter-spacing: -2px;
+            margin-bottom: 2rem;
+            text-shadow: 0 0 15px var(--neon-blue);
+            color: #fff;
+        }
+
+        .cyber-input {
+            width: 100%;
+            background: rgba(0,0,0,0.6);
+            border: 1px solid #444;
+            border-left: 3px solid var(--neon-blue);
+            padding: 15px;
+            color: var(--neon-blue);
+            font-family: var(--font-code);
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            transition: 0.3s;
+        }
+        .cyber-input:focus { 
+            box-shadow: 0 0 20px rgba(0, 243, 255, 0.15); 
+            border-color: var(--neon-blue);
+        }
+
+        .cyber-btn {
+            width: 100%;
+            padding: 15px;
+            background: rgba(0, 243, 255, 0.1);
+            border: 1px solid var(--neon-blue);
+            color: var(--neon-blue);
+            font-family: var(--font-code);
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-bottom: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        .cyber-btn:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 25px var(--neon-blue); }
+        .cyber-btn:active { transform: scale(0.98); }
+        
+        .cyber-btn.secondary { border-color: #555; color: #888; background: transparent; }
+        .cyber-btn.secondary:hover { border-color: #fff; color: #fff; box-shadow: none; background: rgba(255,255,255,0.05); }
+
+        /* --- SHARE AREA --- */
+        #share-area {
+            background: rgba(0,0,0,0.8);
+            border: 1px dashed #555;
+            padding: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #share-link-text { color: var(--neon-purple); font-family: var(--font-code); font-size: 1.4rem; letter-spacing: 2px; }
+
+        /* --- CHAT SCREEN --- */
+        .chat-header {
+            height: 70px;
+            background: rgba(3, 5, 8, 0.95);
+            border-bottom: var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 20px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            z-index: 50;
+        }
+
+        .status-dot {
+            height: 10px; width: 10px; background: #333; border-radius: 50%;
+            display: inline-block; margin-right: 8px;
+            transition: 0.3s;
+            box-shadow: inset 0 0 2px #000;
+        }
+        .status-dot.active { background: var(--neon-blue); box-shadow: 0 0 10px var(--neon-blue); }
+
+        #messages {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--neon-blue) #111;
+        }
+        
+        /* Message Bubbles */
+        .message {
+            max-width: 85%;
+            padding: 12px 18px;
+            position: relative;
+            font-size: 1rem;
+            word-wrap: break-word;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .message.sent {
+            align-self: flex-end;
+            background: linear-gradient(135deg, rgba(0, 243, 255, 0.15), rgba(0, 243, 255, 0.05));
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            border-right: 3px solid var(--neon-blue);
+            color: #d0faff;
+            border-radius: 12px 2px 12px 12px;
+        }
+
+        .message.received {
+            align-self: flex-start;
+            background: linear-gradient(135deg, rgba(188, 19, 254, 0.15), rgba(188, 19, 254, 0.05));
+            border: 1px solid rgba(188, 19, 254, 0.3);
+            border-left: 3px solid var(--neon-purple);
+            color: #f0d0ff;
+            border-radius: 2px 12px 12px 12px;
+        }
+
+        /* --- INPUT AREA --- */
+        .input-area {
+            background: #000;
+            border-top: var(--border);
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            z-index: 50;
+        }
+
+        .tool-bar { display: flex; gap: 8px; }
+        
+        .icon-btn {
+            background: rgba(255,255,255,0.05); 
+            border: 1px solid #333; 
+            color: #888;
+            width: 42px; height: 42px; 
+            border-radius: 4px;
+            cursor: pointer; 
+            display: flex; align-items: center; justify-content: center;
+            transition: 0.2s;
+        }
+        .icon-btn:hover { border-color: var(--neon-blue); color: var(--neon-blue); background: rgba(0, 243, 255, 0.1); }
+        .icon-btn.vo-mode:hover { border-color: var(--neon-red); color: var(--neon-red); background: rgba(255, 42, 42, 0.1); }
+        
+        .recording {
+            animation: pulseRed 1s infinite;
+            background: rgba(255, 42, 42, 0.2) !important;
+            border-color: var(--neon-red) !important; color: var(--neon-red) !important;
+        }
+        @keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(255, 42, 42, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(255, 42, 42, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 42, 42, 0); } }
+
+        #message-input {
+            flex-grow: 1;
+            background: transparent; border: none; color: #fff;
+            font-family: var(--font-main); font-size: 1.1rem;
+            padding: 0 10px;
+        }
+        
+        .send-btn {
+            background: var(--neon-blue); color: #000; border: none;
+            width: 42px; height: 42px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 0 15px var(--neon-blue);
+        }
+        .send-btn:active { transform: scale(0.9); }
+
+        /* Helper for media */
+        .vo-container { border: 1px dashed var(--neon-red); padding: 10px; background: rgba(255,42,42,0.05); text-align: center; }
+        .vo-btn { background: var(--neon-red); color: #000; border: none; font-weight: bold; padding: 5px 10px; cursor: pointer; margin-top: 5px; }
+        img { max-width: 100%; border-radius: 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="screen">
+        <div class="cyber-card">
+            <div class="logo-text"><i class="fas fa-shield-alt"></i> SECURE // SPEAK</div>
+            
+            <button id="btn-create" class="cyber-btn"><i class="fas fa-plus-square"></i> INITIALIZE NEW ROOM</button>
+            
+            <div id="share-area" class="hidden">
+                <div style="text-align: left;">
+                    <span style="color:#666; font-size:0.7rem; display:block;">ACCESS CODE GENERATED</span>
+                    <div id="share-link-text"></div>
+                </div>
+                <button class="icon-btn" id="btn-copy"><i class="fas fa-copy"></i></button>
+            </div>
+
+            <div style="margin: 25px 0; color: #444; font-family: var(--font-code);">--- OR CONNECT ---</div>
+            
+            <input type="text" id="room-id" class="cyber-input" placeholder="ENTER ROOM ID...">
+            <button id="btn-join" class="cyber-btn secondary">ESTABLISH UPLINK <i class="fas fa-satellite-dish"></i></button>
+        </div>
+    </div>
+
+    <div id="chat-screen" class="screen hidden">
+        <div class="chat-header">
+            <div class="flex" style="align-items: center;">
+                <div id="connection-dot" class="status-dot"></div>
+                <div style="margin-left: 10px;">
+                    <div style="font-size: 0.7rem; color: #666; font-family: var(--font-code); letter-spacing: 1px;">TARGET ID</div>
+                    <div id="display-room" style="font-family: var(--font-code); color: var(--neon-blue); font-weight: bold;">...</div>
+                </div>
+            </div>
+            
+            <div id="status-text" style="font-size: 0.8rem; color: #555; font-family: var(--font-code);">WAITING FOR PEER...</div>
+            
+            <button onclick="location.reload()" class="icon-btn" style="border-color: #333; width: 35px; height: 35px;"><i class="fas fa-power-off"></i></button>
+        </div>
+
+        <div id="messages"></div>
+
+        <div class="input-area">
+            <div class="tool-bar">
+                <button class="icon-btn" onclick="triggerImageUpload(false)"><i class="far fa-image"></i></button>
+                <button class="icon-btn vo-mode" onclick="triggerImageUpload(true)" title="View Once"><i class="fas fa-eye-slash"></i></button>
+                <button id="record-btn" class="icon-btn" onmousedown="startRecording(false)" onmouseup="stopRecording()"><i class="fas fa-microphone"></i></button>
+                <button id="record-btn-vo" class="icon-btn vo-mode" onmousedown="startRecording(true)" onmouseup="stopRecording()"><i class="fas fa-hourglass-half"></i></button>
+            </div>
+
+            <input type="text" id="message-input" placeholder="Encrypting message..." autocomplete="off">
+            <button onclick="sendTextMessage()" class="send-btn"><i class="fas fa-paper-plane"></i></button>
+            <input type="file" id="image-input" accept="image/*" style="display: none;">
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <div id="image-modal" class="modal" onclick="closeModal()">
+        <span class="close-modal">&times;</span>
+        <img class="modal-content" id="full-image">
+    </div>
+</body>
+</html>
