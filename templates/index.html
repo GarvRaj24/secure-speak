@@ -112,7 +112,6 @@
         .info-block { display: flex; flex-direction: column; }
         .info-label { font-size: 0.65rem; color: #666; font-family: var(--font-code); letter-spacing: 1px; }
         .info-val { font-family: var(--font-code); font-weight: bold; }
-        .header-actions { display: flex; align-items: center; gap: 8px; }
 
         .status-dot {
             height: 10px; width: 10px; background: #333; border-radius: 50%;
@@ -156,73 +155,10 @@
         }
         .icon-btn:hover { border-color: var(--neon-blue); color: var(--neon-blue); }
         .icon-btn.vo-mode:hover { border-color: var(--neon-red); color: var(--neon-red); }
-        .icon-btn.call-btn { border-color: var(--neon-green); color: var(--neon-green); }
-        .icon-btn.call-btn:hover { background: rgba(0,255,136,0.15); box-shadow: 0 0 15px var(--neon-green); }
         .recording { animation: pulseRed 1s infinite; background: rgba(255,42,42,0.2) !important; border-color: var(--neon-red) !important; color: var(--neon-red) !important; }
         @keyframes pulseRed { 0% { box-shadow: 0 0 0 0 rgba(255,42,42,0.4); } 70% { box-shadow: 0 0 0 10px rgba(255,42,42,0); } 100% { box-shadow: 0 0 0 0 rgba(255,42,42,0); } }
         #message-input { flex-grow: 1; background: transparent; border: none; color: #fff; font-family: var(--font-main); font-size: 1.1rem; padding: 0 10px; min-width: 0; }
         .send-btn { background: var(--neon-blue); color: #000; border: none; width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 0 15px var(--neon-blue); flex-shrink: 0; }
-
-        /* ===================== CALL OVERLAY ===================== */
-        .call-overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(3, 5, 8, 0.96); backdrop-filter: blur(20px);
-            z-index: 500; display: none;
-            flex-direction: column; align-items: center; justify-content: center;
-            gap: 30px;
-        }
-        .call-overlay::before {
-            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-            background: linear-gradient(90deg, transparent, var(--neon-green), transparent);
-            animation: scanline 2s ease-in-out infinite;
-        }
-        @keyframes scanline { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
-
-        .call-avatar {
-            width: 100px; height: 100px; border-radius: 50%;
-            border: 2px solid var(--neon-green);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 2.5rem; color: var(--neon-green);
-            box-shadow: 0 0 30px rgba(0,255,136,0.3);
-            animation: pulseGreen 2s ease-in-out infinite;
-        }
-        @keyframes pulseGreen {
-            0%,100% { box-shadow: 0 0 20px rgba(0,255,136,0.2); }
-            50% { box-shadow: 0 0 50px rgba(0,255,136,0.5); }
-        }
-        .call-overlay.incoming .call-avatar { border-color: var(--neon-purple); color: var(--neon-purple); box-shadow: 0 0 30px rgba(188,19,254,0.3); animation: pulseGreen 1s ease-in-out infinite; }
-
-        #call-peer-name {
-            font-family: var(--font-code); font-size: 1.8rem;
-            color: #fff; letter-spacing: 3px;
-        }
-        #call-status {
-            font-family: var(--font-code); font-size: 0.8rem;
-            color: var(--neon-green); letter-spacing: 2px;
-            animation: blink 1.5s step-end infinite;
-        }
-        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-
-        #call-timer-container {
-            font-family: var(--font-code); font-size: 1rem; color: #fff;
-            display: none; align-items: center; gap: 8px;
-        }
-        #call-timer { color: var(--neon-green); }
-
-        .call-actions { display: flex; gap: 20px; align-items: center; }
-        .call-action-btn {
-            width: 64px; height: 64px; border-radius: 50%; border: none;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.4rem; cursor: pointer; transition: 0.2s;
-        }
-        #call-accept { background: var(--neon-green); color: #000; box-shadow: 0 0 20px var(--neon-green); }
-        #call-accept:hover { transform: scale(1.1); }
-        #call-reject { background: var(--neon-red); color: #fff; box-shadow: 0 0 20px var(--neon-red); }
-        #call-reject:hover { transform: scale(1.1); }
-        #btn-hangup { background: var(--neon-red); color: #fff; box-shadow: 0 0 20px var(--neon-red); }
-        #btn-hangup:hover { transform: scale(1.1); }
-        #btn-mute { background: rgba(255,255,255,0.1); color: #fff; border: 2px solid #555; }
-        #btn-mute:hover { background: rgba(255,255,255,0.2); }
 
         /* MODAL */
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.95); backdrop-filter: blur(20px); align-items: center; justify-content: center; animation: fadeIn 0.3s; }
@@ -236,7 +172,6 @@
         .vo-container { border: 1px dashed var(--neon-red); padding: 10px; background: rgba(255,42,42,0.05); text-align: center; }
         .vo-btn { background: var(--neon-red); color: #000; border: none; font-weight: bold; padding: 5px 10px; cursor: pointer; margin-top: 5px; }
 
-        /* Scrollbar */
         #messages::-webkit-scrollbar { width: 4px; }
         #messages::-webkit-scrollbar-track { background: transparent; }
         #messages::-webkit-scrollbar-thumb { background: rgba(0,243,255,0.2); border-radius: 2px; }
@@ -291,9 +226,6 @@
             </div>
         </div>
         <div class="header-actions">
-            <button id="btn-call" class="icon-btn call-btn" onclick="initiateCall()" title="Voice Call" style="display:none;">
-                <i class="fas fa-phone"></i>
-            </button>
             <button onclick="location.reload()" class="icon-btn" title="Disconnect" style="border-color: #333; width: 35px; height: 35px;">
                 <i class="fas fa-power-off"></i>
             </button>
@@ -313,35 +245,6 @@
         <input type="file" id="image-input" accept="image/*" style="display: none;">
     </div>
 </div>
-
-<!-- CALL OVERLAY -->
-<div id="call-overlay" class="call-overlay">
-    <div class="call-avatar"><i class="fas fa-user"></i></div>
-    <div id="call-peer-name">PEER</div>
-    <div id="call-status">CALLING...</div>
-    <div id="call-timer-container">
-        <i class="fas fa-lock" style="color:var(--neon-green); font-size:0.8rem;"></i>
-        <span id="call-timer" >00:00</span>
-        <span style="color:#555; font-size:0.7rem; font-family:var(--font-code);">E2E ENCRYPTED</span>
-    </div>
-    <div class="call-actions">
-        <button id="call-accept" class="call-action-btn" onclick="acceptCall()" title="Accept">
-            <i class="fas fa-phone"></i>
-        </button>
-        <button id="btn-mute" class="call-action-btn" onclick="toggleMute()" title="Mute" style="display:none;">
-            <i class="fas fa-microphone"></i>
-        </button>
-        <button id="call-reject" class="call-action-btn" onclick="rejectCall()" title="Reject">
-            <i class="fas fa-phone-slash"></i>
-        </button>
-        <button id="btn-hangup" class="call-action-btn" onclick="hangUp()" title="Hang Up" style="display:none;">
-            <i class="fas fa-phone-slash"></i>
-        </button>
-    </div>
-</div>
-
-<!-- Hidden audio element for remote peer voice -->
-<audio id="remote-audio" autoplay playsinline style="display:none;"></audio>
 
 <!-- IMAGE MODAL -->
 <div id="image-modal" class="modal" onclick="closeModal()">

@@ -1,4 +1,8 @@
-const socket = io();
+// Force WebSocket transport to ensure internet-wide connectivity on Render
+const socket = io({
+    transports: ['websocket']
+});
+
 let room = null;
 let myKeyPair = null;
 let peerPublicKey = null;
@@ -168,7 +172,6 @@ async function encryptAndSend(dataBuffer, type, isViewOnce = false) {
 
 socket.on('receive_message', async (data) => {
     try {
-        const recvAt = performance.now();
         const iv      = base64ToArrayBuffer(data.iv);
         const encKey  = base64ToArrayBuffer(data.encryptedKey);
         const encData = base64ToArrayBuffer(data.encryptedData);
