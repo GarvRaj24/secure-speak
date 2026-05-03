@@ -8,52 +8,13 @@ let currentRecordingModeViewOnce = false;
 let myUsername = "Anonymous";
 let peerUsername = "Unknown";
 
-// --- WebRTC State ---
-let peerConnection = null;
-let localStream = null;
-let isCallInitiator = false;
-let isMuted = false;
-let pendingIceCandidates = [];
-
-const ICE_SERVERS = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        {
-            urls: 'turn:openrelay.metered.ca:80',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-        },
-        {
-            urls: 'turn:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-        },
-        {
-            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-        },
-        {
-            urls: 'turns:openrelay.metered.ca:443',
-            username: 'openrelayproject',
-            credential: 'openrelayproject'
-        }
-    ]
-};
-
-// ============================================================
-// --- CN PANEL STATE ---
-// ============================================================
+// CN Panel state
 let pendingRttMap = {};
 let msgIdCounter  = 0;
 let handshakeStart = null;
 let hsTimings = {};
-let iceLog = [];
 
-// ============================================================
 // --- SECURITY ENFORCERS ---
-// ============================================================
 document.addEventListener('contextmenu', event => event.preventDefault());
 document.addEventListener('keydown', (e) => {
     if (e.keyCode === 123 || (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74))) {
@@ -70,9 +31,6 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('dragstart', (e) => e.preventDefault());
 
-// ============================================================
-// --- INIT ---
-// ============================================================
 window.onload = function() {
     console.log("SecureSpeak System Online");
     const params = new URLSearchParams(window.location.search);
@@ -143,19 +101,15 @@ async function joinChat() {
     }
 }
 
-// ============================================================
-// --- CHAT SIGNALING ---
-// ============================================================
+// --- Chat Signaling ---
+
 socket.on('user_joined', async (data) => {
     peerUsername = data.username || "Unknown";
     document.getElementById('status-text').innerHTML = `<span style='color:#bc13fe'>DETECTED: ${peerUsername}</span>`;
-
     const exportedKey = await window.crypto.subtle.exportKey("jwk", myKeyPair.publicKey);
     socket.emit('signal_public_key', { room, key: exportedKey, request_reply: true, username: myUsername });
-
     hsTimings.key_exchange_sent = Math.round(performance.now() - handshakeStart);
     updateHandshakeTimeline();
-    showCallBtn(true);
 });
 
 socket.on('receive_public_key', async (data) => {
@@ -163,13 +117,11 @@ socket.on('receive_public_key', async (data) => {
     peerPublicKey = await window.crypto.subtle.importKey(
         "jwk", data.key, { name: "RSA-OAEP", hash: "SHA-256" }, true, ["encrypt"]
     );
-
     hsTimings.aes_session = Math.round(performance.now() - handshakeStart);
     updateHandshakeTimeline();
 
     document.getElementById('status-text').innerHTML = `<span style='color:#00f3ff'>SECURE UPLINK: ${peerUsername}</span>`;
     document.getElementById('connection-dot').classList.add('active');
-    showCallBtn(true);
 
     if (data.request_reply) {
         const myExportedKey = await window.crypto.subtle.exportKey("jwk", myKeyPair.publicKey);
@@ -177,9 +129,8 @@ socket.on('receive_public_key', async (data) => {
     }
 });
 
-// ============================================================
-// --- ENCRYPTION + RTT ---
-// ============================================================
+// --- Encryption ---
+
 async function encryptAndSend(dataBuffer, type, isViewOnce = false) {
     if (!peerPublicKey) return alert("UPLINK OFFLINE: Wait for peer.");
     try {
@@ -229,18 +180,9 @@ socket.on('receive_message', async (data) => {
         const aesKey = await window.crypto.subtle.importKey("raw", rawAesKey, { name: "AES-GCM" }, false, ["decrypt"]);
         const decryptedData = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, aesKey, encData);
 
-        if (data.echoMsgId && pendingRttMap[data.echoMsgId]) {
-            const p = pendingRttMap[data.echoMsgId];
-            const rtt = Math.round(recvAt - p.sentAt);
-            logRtt(p.label, rtt, data.type);
-            delete pendingRttMap[data.echoMsgId];
-        }
-
         renderMessage(decryptedData, data.type, 'received', null, data.isViewOnce, data.username);
 
-        if (data.msgId) {
-            socket.emit('rtt_echo', { room, echoMsgId: data.msgId });
-        }
+        if (data.msgId) socket.emit('rtt_echo', { room, echoMsgId: data.msgId });
     } catch (e) { console.error("Decryption Error:", e); }
 });
 
@@ -248,327 +190,13 @@ socket.on('rtt_echo', (data) => {
     const recvAt = performance.now();
     if (data.echoMsgId && pendingRttMap[data.echoMsgId]) {
         const p = pendingRttMap[data.echoMsgId];
-        const rtt = Math.round(recvAt - p.sentAt);
-        logRtt(p.label, rtt, 'text');
+        logRtt(p.label, Math.round(recvAt - p.sentAt));
         delete pendingRttMap[data.echoMsgId];
     }
 });
 
-// ============================================================
-// --- CN PANEL ---
-// ============================================================
-let cnPanelVisible = false;
-let packetLog = [];
-let rttLog = [];
+// --- Messaging ---
 
-function toggleCnPanel() {
-    cnPanelVisible = !cnPanelVisible;
-    document.getElementById('cn-panel').classList.toggle('hidden', !cnPanelVisible);
-    document.getElementById('toggle-cn-panel').style.color = cnPanelVisible ? 'var(--neon-blue)' : '';
-    document.getElementById('toggle-cn-panel').style.borderColor = cnPanelVisible ? 'var(--neon-blue)' : '';
-}
-
-function logPacket(dir, event, type, ivB64, keyB64, datB64, totalBytes) {
-    const entry = { dir, event, type, ivB64, keyB64, datB64, totalBytes };
-    packetLog.unshift(entry);
-    if (packetLog.length > 20) packetLog.pop();
-    renderPacketInspector();
-}
-
-function renderPacketInspector() {
-    const container = document.getElementById('pkt-list');
-    if (!container) return;
-    container.innerHTML = packetLog.slice(0, 6).map(p => {
-        const dirClass = p.dir === 'OUT' ? 'pkt-out' : 'pkt-in';
-        const badge = p.dir === 'OUT'
-            ? `<span class="cn-badge cn-badge-green">AES-GCM</span>`
-            : `<span class="cn-badge cn-badge-blue">DECRYPTED ✓</span>`;
-        const hexPreview = p.datB64.replace(/[^A-Za-z0-9]/g, '').substring(0, 40);
-        const kb = (p.totalBytes / 1024).toFixed(1);
-        return `<div class="pkt-row">
-            <div class="pkt-meta">
-                <span class="pkt-dir ${dirClass}">${p.dir}</span>
-                <span class="pkt-event">${p.event} ${badge}</span>
-                <span class="pkt-size">${kb}KB</span>
-            </div>
-            <div class="pkt-hex">
-                <span class="hex-key">iv:</span> ${p.ivB64.substring(0,16)}…
-                &nbsp;<span class="hex-key">key:</span> ${p.keyB64.substring(0,12)}…<br>
-                <span class="hex-key">data:</span> ${hexPreview}…
-            </div>
-        </div>`;
-    }).join('') || '<div class="cn-empty">No packets yet — send a message</div>';
-}
-
-function logRtt(label, rttMs, type) {
-    rttLog.unshift({ label, rttMs, type });
-    if (rttLog.length > 10) rttLog.pop();
-    renderRttPanel();
-}
-
-function renderRttPanel() {
-    const container = document.getElementById('rtt-list');
-    if (!container) return;
-    const maxRtt = Math.max(...rttLog.map(r => r.rttMs), 1);
-    container.innerHTML = rttLog.slice(0, 6).map(r => {
-        const pct = Math.min(Math.round((r.rttMs / maxRtt) * 100), 100);
-        const color = r.rttMs < 50 ? 'var(--neon-green)' : r.rttMs < 150 ? 'var(--neon-blue)' : 'var(--neon-red)';
-        return `<div class="rtt-row">
-            <span class="rtt-label">${r.label}</span>
-            <div class="rtt-bar-wrap"><div class="rtt-bar" style="width:${pct}%;background:${color}"></div></div>
-            <span class="rtt-val" style="color:${color}">${r.rttMs}ms</span>
-        </div>`;
-    }).join('') || '<div class="cn-empty">RTT appears after first message exchange</div>';
-}
-
-const HS_STEPS = [
-    { key: 'start',             label: 'TCP connect',     sub: 'Socket.IO WS',   color: 'var(--neon-blue)' },
-    { key: 'rsa_keygen',        label: 'RSA-2048 keygen', sub: 'Web Crypto API', color: 'var(--neon-purple)' },
-    { key: 'tcp_connect',       label: 'Room join',       sub: 'Socket.IO emit', color: 'var(--neon-purple)' },
-    { key: 'key_exchange_sent', label: 'Key exchange',    sub: 'RSA-OAEP wrap',  color: 'var(--neon-purple)' },
-    { key: 'aes_session',       label: 'AES session',     sub: '256-bit GCM',    color: 'var(--neon-green)' },
-    { key: 'dtls',              label: 'DTLS-SRTP',       sub: 'E2E voice ready',color: 'var(--neon-green)' },
-];
-
-function updateHandshakeTimeline() {
-    const container = document.getElementById('hs-steps');
-    if (!container) return;
-    container.innerHTML = HS_STEPS.map((step, i) => {
-        const ms = hsTimings[step.key];
-        const done = ms !== undefined;
-        const borderStyle = done ? `0.5px solid ${step.color}` : '0.5px solid var(--hs-border)';
-        const numBg = done ? step.color : 'transparent';
-        const numColor = done ? '#000' : 'var(--hs-num-color)';
-        const labelColor = done ? 'var(--hs-label-done)' : 'var(--hs-label-pending)';
-        return `<div class="hs-step" style="border:${borderStyle};">
-            <div class="hs-num" style="background:${numBg};color:${numColor};">${done ? '✓' : i+1}</div>
-            <div>
-                <div class="hs-label" style="color:${labelColor}">${step.label}</div>
-                <div class="hs-sub">${step.sub}</div>
-            </div>
-            <div class="hs-ms">${done ? ms + 'ms' : '—'}</div>
-        </div>`;
-    }).join('');
-}
-
-function markDtlsReady() {
-    hsTimings.dtls = Math.round(performance.now() - handshakeStart);
-    updateHandshakeTimeline();
-}
-
-// ============================================================
-// --- WebRTC VOICE CALL ---
-// ============================================================
-async function createPeerConnection() {
-    pendingIceCandidates = [];
-    peerConnection = new RTCPeerConnection(ICE_SERVERS);
-    localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-    peerConnection.ontrack = (event) => {
-        const remoteAudio = document.getElementById('remote-audio');
-        remoteAudio.srcObject = event.streams[0];
-        remoteAudio.play().catch(e => console.error('Audio play error:', e));
-    };
-
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-            logIceCandidate(event.candidate);
-            socket.emit('webrtc_ice_candidate', { room, candidate: event.candidate });
-        }
-    };
-
-    peerConnection.onconnectionstatechange = () => {
-        const state = peerConnection.connectionState;
-        console.log('WebRTC connection state:', state);
-        if (state === 'connected') {
-            setCallStatus('VOICE ENCRYPTED');
-            document.getElementById('call-timer-container').style.display = 'flex';
-            startCallTimer();
-            markDtlsReady();
-        } else if (state === 'disconnected' || state === 'failed' || state === 'closed') {
-            endCallCleanup();
-        }
-    };
-
-    peerConnection.oniceconnectionstatechange = () => {
-        console.log('ICE state:', peerConnection.iceConnectionState);
-        if (peerConnection.iceConnectionState === 'failed') {
-            peerConnection.restartIce();
-        }
-    };
-}
-
-async function addIceCandidate(candidate) {
-    if (!peerConnection) return;
-    if (!peerConnection.remoteDescription) {
-        pendingIceCandidates.push(candidate);
-        return;
-    }
-    try {
-        await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-    } catch (e) {
-        console.error('ICE candidate error:', e);
-    }
-}
-
-async function flushPendingIceCandidates() {
-    for (const candidate of pendingIceCandidates) {
-        try {
-            await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        } catch (e) {
-            console.error('Flushing ICE error:', e);
-        }
-    }
-    pendingIceCandidates = [];
-}
-
-async function initiateCall() {
-    if (!peerPublicKey) return alert("UPLINK OFFLINE: Connect to a peer first.");
-    if (peerConnection) return;
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        isMuted = false;
-        isCallInitiator = true;
-        socket.emit('call_request', { room, username: myUsername });
-        showCallOverlay('outgoing');
-        setCallStatus('CALLING...');
-    } catch (e) {
-        alert("MIC ACCESS BLOCKED: Please allow microphone permissions.");
-    }
-}
-
-socket.on('call_request', (data) => {
-    if (peerConnection) return;
-    peerUsername = data.username || peerUsername;
-    showCallOverlay('incoming');
-    setCallStatus(`INCOMING CALL: ${peerUsername}`);
-});
-
-async function acceptCall() {
-    try {
-        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-        isMuted = false;
-        socket.emit('call_accepted', { room });
-        showCallOverlay('active');
-        await createPeerConnection();
-    } catch (e) {
-        alert("MIC ACCESS BLOCKED");
-        rejectCall();
-    }
-}
-
-function rejectCall() {
-    socket.emit('call_rejected', { room });
-    hideCallOverlay();
-}
-
-socket.on('call_accepted', async () => {
-    showCallOverlay('active');
-    await createPeerConnection();
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    socket.emit('webrtc_offer', { room, sdp: offer });
-});
-
-socket.on('call_rejected', () => {
-    setCallStatus('CALL REJECTED');
-    hideCallOverlay();
-    endCallCleanup();
-    appendSystemMessage(`${peerUsername} rejected the call.`);
-});
-
-socket.on('webrtc_offer', async (data) => {
-    if (!peerConnection) return;
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    await flushPendingIceCandidates();
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    socket.emit('webrtc_answer', { room, sdp: answer });
-});
-
-socket.on('webrtc_answer', async (data) => {
-    if (!peerConnection) return;
-    await peerConnection.setRemoteDescription(new RTCSessionDescription(data.sdp));
-    await flushPendingIceCandidates();
-});
-
-socket.on('webrtc_ice_candidate', async (data) => {
-    await addIceCandidate(data.candidate);
-});
-
-socket.on('call_ended', () => {
-    appendSystemMessage(`${peerUsername} ended the call.`);
-    endCallCleanup();
-});
-
-function hangUp() { socket.emit('call_ended', { room }); endCallCleanup(); }
-
-function toggleMute() {
-    if (!localStream) return;
-    isMuted = !isMuted;
-    localStream.getAudioTracks().forEach(track => { track.enabled = !isMuted; });
-    const btn = document.getElementById('btn-mute');
-    btn.innerHTML = isMuted ? '<i class="fas fa-microphone-slash"></i>' : '<i class="fas fa-microphone"></i>';
-    btn.style.color = isMuted ? 'var(--neon-red)' : '';
-    btn.style.borderColor = isMuted ? 'var(--neon-red)' : '';
-}
-
-function endCallCleanup() {
-    if (peerConnection) { peerConnection.close(); peerConnection = null; }
-    if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    pendingIceCandidates = [];
-    const remoteAudio = document.getElementById('remote-audio');
-    if (remoteAudio.srcObject) remoteAudio.srcObject = null;
-    stopCallTimer(); hideCallOverlay();
-    isCallInitiator = false; isMuted = false;
-}
-
-function showCallBtn(show) { document.getElementById('btn-call').style.display = show ? 'flex' : 'none'; }
-
-function showCallOverlay(mode) {
-    const overlay = document.getElementById('call-overlay');
-    overlay.className = 'call-overlay'; overlay.classList.add(mode);
-    overlay.style.display = 'flex';
-    document.getElementById('call-peer-name').innerText = peerUsername.toUpperCase();
-    document.getElementById('call-accept').style.display = mode === 'incoming' ? 'flex' : 'none';
-    document.getElementById('call-reject').style.display  = mode === 'incoming' ? 'flex' : 'none';
-    document.getElementById('btn-hangup').style.display   = mode !== 'incoming' ? 'flex' : 'none';
-    document.getElementById('btn-mute').style.display     = mode === 'active'   ? 'flex' : 'none';
-    document.getElementById('call-timer-container').style.display = 'none';
-}
-
-function hideCallOverlay() { document.getElementById('call-overlay').style.display = 'none'; }
-function setCallStatus(text) { document.getElementById('call-status').innerText = text; }
-
-let callTimerInterval = null, callSeconds = 0;
-function startCallTimer() {
-    callSeconds = 0;
-    callTimerInterval = setInterval(() => {
-        callSeconds++;
-        const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
-        const s = String(callSeconds % 60).padStart(2, '0');
-        document.getElementById('call-timer').innerText = `${m}:${s}`;
-    }, 1000);
-}
-function stopCallTimer() {
-    clearInterval(callTimerInterval); callTimerInterval = null; callSeconds = 0;
-    document.getElementById('call-timer').innerText = '00:00';
-}
-
-function logIceCandidate(candidate) {
-    if (!candidate || !candidate.candidate) return;
-    const raw = candidate.candidate;
-    let type = 'host';
-    if (raw.includes('srflx')) type = 'srflx';
-    else if (raw.includes('relay')) type = 'relay';
-    const addrMatch = raw.match(/(\d+\.\d+\.\d+\.\d+|\S+?) (\d+) /);
-    const addr = addrMatch ? `${addrMatch[1]}:${addrMatch[2]}` : raw.substring(0, 30);
-    iceLog.unshift({ type, addr });
-}
-
-// ============================================================
-// --- MESSAGING ---
-// ============================================================
 function sendTextMessage() {
     const input = document.getElementById('message-input');
     if (input.value) { encryptAndSend(new TextEncoder().encode(input.value), 'text'); input.value = ''; input.focus(); }
@@ -651,22 +279,111 @@ function startDestructTimer(div, url, msg, closeActiveModal = false) {
     }, 10000);
 }
 
-function appendSystemMessage(text) {
-    const div = document.createElement('div');
-    div.style.cssText = 'text-align:center;color:#555;font-family:var(--font-code);font-size:0.7rem;padding:5px;';
-    div.innerText = `── ${text} ──`;
-    document.getElementById('messages').appendChild(div);
-    document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
-}
-
 function openModal(src) { document.getElementById('image-modal').classList.add('modal-active'); document.getElementById('full-image').src = src; }
 function closeModal() { document.getElementById('image-modal').classList.remove('modal-active'); setTimeout(() => { document.getElementById('full-image').src = ''; }, 300); }
 function copyId() { const t = document.getElementById('share-link-text').innerText; if (t) { navigator.clipboard.writeText(t); alert("ROOM ID COPIED"); } }
 function copyFullLink() { const t = document.getElementById('share-full-url').innerText; if (t) { navigator.clipboard.writeText(t); alert("SHARE LINK COPIED — Send this to your peer!"); } }
 
+// --- CN Panel ---
+
+let cnPanelVisible = false;
+let packetLog = [];
+let rttLog = [];
+
+function toggleCnPanel() {
+    cnPanelVisible = !cnPanelVisible;
+    document.getElementById('cn-panel').classList.toggle('hidden', !cnPanelVisible);
+    document.getElementById('toggle-cn-panel').style.color = cnPanelVisible ? 'var(--neon-blue)' : '';
+    document.getElementById('toggle-cn-panel').style.borderColor = cnPanelVisible ? 'var(--neon-blue)' : '';
+}
+
+function logPacket(dir, event, type, ivB64, keyB64, datB64, totalBytes) {
+    packetLog.unshift({ dir, event, type, ivB64, keyB64, datB64, totalBytes });
+    if (packetLog.length > 20) packetLog.pop();
+    renderPacketInspector();
+}
+
+function renderPacketInspector() {
+    const container = document.getElementById('pkt-list');
+    if (!container) return;
+    container.innerHTML = packetLog.slice(0, 6).map(p => {
+        const dirClass = p.dir === 'OUT' ? 'pkt-out' : 'pkt-in';
+        const badge = p.dir === 'OUT'
+            ? `<span class="cn-badge cn-badge-green">AES-GCM</span>`
+            : `<span class="cn-badge cn-badge-blue">DECRYPTED ✓</span>`;
+        const hexPreview = p.datB64.replace(/[^A-Za-z0-9]/g, '').substring(0, 40);
+        const kb = (p.totalBytes / 1024).toFixed(1);
+        return `<div class="pkt-row">
+            <div class="pkt-meta">
+                <span class="pkt-dir ${dirClass}">${p.dir}</span>
+                <span class="pkt-event">${p.event} ${badge}</span>
+                <span class="pkt-size">${kb}KB</span>
+            </div>
+            <div class="pkt-hex">
+                <span class="hex-key">iv:</span> ${p.ivB64.substring(0,16)}…
+                &nbsp;<span class="hex-key">key:</span> ${p.keyB64.substring(0,12)}…<br>
+                <span class="hex-key">data:</span> ${hexPreview}…
+            </div>
+        </div>`;
+    }).join('') || '<div class="cn-empty">No packets yet — send a message</div>';
+}
+
+function logRtt(label, rttMs) {
+    rttLog.unshift({ label, rttMs });
+    if (rttLog.length > 10) rttLog.pop();
+    renderRttPanel();
+}
+
+function renderRttPanel() {
+    const container = document.getElementById('rtt-list');
+    if (!container) return;
+    const maxRtt = Math.max(...rttLog.map(r => r.rttMs), 1);
+    container.innerHTML = rttLog.slice(0, 6).map(r => {
+        const pct = Math.min(Math.round((r.rttMs / maxRtt) * 100), 100);
+        const color = r.rttMs < 100 ? 'var(--neon-green)' : r.rttMs < 300 ? 'var(--neon-blue)' : 'var(--neon-red)';
+        return `<div class="rtt-row">
+            <span class="rtt-label">${r.label}</span>
+            <div class="rtt-bar-wrap"><div class="rtt-bar" style="width:${pct}%;background:${color}"></div></div>
+            <span class="rtt-val" style="color:${color}">${r.rttMs}ms</span>
+        </div>`;
+    }).join('') || '<div class="cn-empty">RTT appears after first message exchange</div>';
+}
+
+const HS_STEPS = [
+    { key: 'start',             label: 'TCP connect',     sub: 'Socket.IO WS',   color: 'var(--neon-blue)' },
+    { key: 'rsa_keygen',        label: 'RSA-2048 keygen', sub: 'Web Crypto API', color: 'var(--neon-purple)' },
+    { key: 'tcp_connect',       label: 'Room join',       sub: 'Socket.IO emit', color: 'var(--neon-purple)' },
+    { key: 'key_exchange_sent', label: 'Key exchange',    sub: 'RSA-OAEP wrap',  color: 'var(--neon-purple)' },
+    { key: 'aes_session',       label: 'AES session',     sub: '256-bit GCM',    color: 'var(--neon-green)' },
+];
+
+function updateHandshakeTimeline() {
+    const container = document.getElementById('hs-steps');
+    if (!container) return;
+    container.innerHTML = HS_STEPS.map((step, i) => {
+        const ms = hsTimings[step.key];
+        const done = ms !== undefined;
+        const borderStyle = done ? `0.5px solid ${step.color}` : '0.5px solid var(--hs-border)';
+        const numBg    = done ? step.color : 'transparent';
+        const numColor = done ? '#000' : 'var(--hs-num-color)';
+        const labelColor = done ? 'var(--hs-label-done)' : 'var(--hs-label-pending)';
+        return `<div class="hs-step" style="border:${borderStyle};">
+            <div class="hs-num" style="background:${numBg};color:${numColor};">${done ? '✓' : i+1}</div>
+            <div>
+                <div class="hs-label" style="color:${labelColor}">${step.label}</div>
+                <div class="hs-sub">${step.sub}</div>
+            </div>
+            <div class="hs-ms">${done ? ms + 'ms' : '—'}</div>
+        </div>`;
+    }).join('');
+}
+
+// --- Utilities ---
+
 function arrayBufferToBase64(buffer) {
     let binary = ''; const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i += 8192) binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 8192, bytes.byteLength)));
+    for (let i = 0; i < bytes.byteLength; i += 8192)
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 8192, bytes.byteLength)));
     return window.btoa(binary);
 }
 function base64ToArrayBuffer(base64) {
@@ -675,9 +392,9 @@ function base64ToArrayBuffer(base64) {
     return bytes.buffer;
 }
 
-window.generateRoom = generateRoom; window.joinChat = joinChat; window.copyId = copyId;
-window.copyFullLink = copyFullLink; window.triggerImageUpload = triggerImageUpload;
+window.generateRoom = generateRoom; window.joinChat = joinChat;
+window.copyId = copyId; window.copyFullLink = copyFullLink;
+window.triggerImageUpload = triggerImageUpload;
 window.startRecording = startRecording; window.stopRecording = stopRecording;
-window.sendTextMessage = sendTextMessage; window.closeModal = closeModal; window.openModal = openModal;
-window.initiateCall = initiateCall; window.acceptCall = acceptCall; window.rejectCall = rejectCall;
-window.hangUp = hangUp; window.toggleMute = toggleMute;
+window.sendTextMessage = sendTextMessage;
+window.closeModal = closeModal; window.openModal = openModal;
